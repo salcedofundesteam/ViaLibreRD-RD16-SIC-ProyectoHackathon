@@ -6,10 +6,10 @@ import numpy as np
 class Tracker:
     def __init__(self, max_disappeared=50, max_distance=50, pixels_per_meter=30):
         self.next_object_id = 0
-        self.objects = {}  # ID -> centroid (x, y)
-        self.disappeared = {}  # ID -> number of frames disappeared
-        self.positions = {} # ID -> list of (timestamp, centroid)
-        self.speeds = {} # ID -> current speed in km/h
+        self.objects = {}  
+        self.disappeared = {}  
+        self.positions = {} 
+        self.speeds = {} 
         
         self.max_disappeared = max_disappeared
         self.max_distance = max_distance
@@ -53,7 +53,7 @@ class Tracker:
             object_ids = list(self.objects.keys())
             object_centroids = list(self.objects.values())
 
-            # Calculate distance matrix
+            
             D = []
             for i in range(len(object_centroids)):
                 row = []
@@ -80,15 +80,12 @@ class Tracker:
                 self.objects[object_id] = input_centroids[col]
                 self.disappeared[object_id] = 0
                 
-                # Update speed
                 self.positions[object_id].append((timestamp, input_centroids[col]))
                 
-                # Keep only last few positions
                 if len(self.positions[object_id]) > 5:
                     self.positions[object_id].pop(0)
                 
                 if len(self.positions[object_id]) >= 2:
-                    # Calculate speed based on last two points
                     (t1, p1) = self.positions[object_id][-2]
                     (t2, p2) = self.positions[object_id][-1]
                     
