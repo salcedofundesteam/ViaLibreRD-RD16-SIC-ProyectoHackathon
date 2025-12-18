@@ -30,8 +30,8 @@ def main():
     fps = cap.get(cv2.CAP_PROP_FPS)
     delay = int(1000 / fps) if fps > 0 else 30
 
-    traffic_light_state = ROJO
-    green_start_time = 0
+    traffic_light_state = VERDE
+    state_start_time = time.time()
     last_person_check_time = time.time()
     last_save_time = time.time()
     
@@ -59,23 +59,25 @@ def main():
         video_timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
         objects, speeds = tracker.update(car_rects, video_timestamp)
         
+        current_time = time.time()
+
         for (object_id, centroid) in objects.items():
             speed = speeds.get(object_id, 0)
             
             # Check for speeding (> 45 km/h) and send alert if not already reported
             if speed > 45 and object_id not in reported_speeding_ids:
-                print(f"¡ALERTA! Vehículo {object_id} excediendo límite de velocidad ({speed:.1f} km/h)")
-                # Send email in a separate thread to avoid freezing the video
-                threading.Thread(target=send_speeding_alert, args=(object_id, speed)).start()
-                reported_speeding_ids.add(object_id)
+                if current_time - last_email_sent_time >= 4:
+                    print(f"¡ALERTA! Vehículo {object_id} excediendo límite de velocidad ({speed:.1f} km/h)")
+                    # Send email in a separate thread to avoid freezing the video
+                    threading.Thread(target=send_speeding_alert, args=(object_id, speed)).start()
+                    reported_speeding_ids.add(object_id)
+                    last_email_sent_time = current_time
             
             text = f"ID {object_id}: {speed:.1f} km/h"
             cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             cv2.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
         
-        current_time = time.time()
-
         if current_time - last_save_time >= 1.0:
             save_data(people_count, car_count)
             last_save_time = current_time
@@ -89,29 +91,27 @@ def main():
                 print(f"Screenshot guardado en {filename}")
                 last_violation_time = current_time
 
-        if traffic_light_state == ROJO:
-            if current_time - last_person_check_time >= 30:
-                if people_count > 0:
-                    traffic_light_state = VERDE
-                    green_start_time = time.time()
-                last_person_check_time = current_time
-        elif traffic_light_state == VERDE:
-            elapsed_green = current_time - green_start_time
-            remaining_green = 15 - int(elapsed_green)
-            if remaining_green <= 0:
-                traffic_light_state = ROJO
+        # Traffic light logic: 10 seconds per color
+        elapsed_time = current_time - state_start_time
+        remaining_time = 10 - int(elapsed_time)
         
+        if remaining_time <= 0:
+            if traffic_light_state == VERDE:
+                traffic_light_state = ROJO
+            else:
+                traffic_light_state = VERDE
+            state_start_time = current_time
+            remaining_time = 10
+
         if traffic_light_state == ROJO:
-            if last_printed_state != ROJO or people_count != last_people_count or car_count != last_car_count:
-                print(f"State: {traffic_light_state}, People: {people_count}, Cars: {car_count}")
+            if last_printed_state != ROJO or people_count != last_people_count or car_count != last_car_count or remaining_time % 5 == 0:
+                print(f"State: {traffic_light_state}, Time Left: {remaining_time}s, People: {people_count}, Cars: {car_count}")
                 last_printed_state = ROJO
                 last_people_count = people_count
                 last_car_count = car_count
         else:
-            elapsed_green = current_time - green_start_time
-            remaining_green = 15 - int(elapsed_green)
-            if last_printed_state != VERDE or people_count != last_people_count or car_count != last_car_count or remaining_green % 5 == 0:
-                 print(f"State: {traffic_light_state}, Green Time Left: {remaining_green}s, People: {people_count}, Cars: {car_count}")
+            if last_printed_state != VERDE or people_count != last_people_count or car_count != last_car_count or remaining_time % 5 == 0:
+                 print(f"State: {traffic_light_state}, Time Left: {remaining_time}s, People: {people_count}, Cars: {car_count}")
                  last_printed_state = VERDE
                  last_people_count = people_count
                  last_car_count = car_count
